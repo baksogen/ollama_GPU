@@ -1532,6 +1532,7 @@ func (s *Server) GenerateRoutes(rc *ollama.Registry) (http.Handler, error) {
 	r.POST("/v1/embeddings", middleware.EmbeddingsMiddleware(), s.EmbedHandler)
 	r.GET("/v1/models", middleware.ListMiddleware(), s.ListHandler)
 	r.GET("/v1/models/:model", middleware.RetrieveMiddleware(), s.ShowHandler)
+	r.POST("/v1/responses", middleware.ResponsesMiddleware(), s.ChatHandler)
 
 	if rc != nil {
 		// wrap old with new
@@ -2195,7 +2196,7 @@ func (s *Server) ChatHandler(c *gin.Context) {
 						return
 					}
 
-					if res.Message.Content != "" || res.Message.Thinking != "" || len(res.Message.ToolCalls) > 0 || r.Done {
+					if res.Message.Content != "" || res.Message.Thinking != "" || len(res.Message.ToolCalls) > 0 || r.Done || len(res.Logprobs) > 0 {
 						slog.Log(context.TODO(), logutil.LevelTrace, "builtin parser output", "parser", m.Config.Parser, "content", content, "thinking", thinking, "toolCalls", toolCalls, "done", r.Done)
 						ch <- res
 					} else {
@@ -2235,8 +2236,16 @@ func (s *Server) ChatHandler(c *gin.Context) {
 						res.Message.ToolCalls = toolCalls
 						res.Message.Content = ""
 					} else if res.Message.Thinking != "" {
-						// don't return
+						// don't return, fall through to send
 					} else {
+						//  Send logprobs while content is being buffered by the parser for tool calls
+						if len(res.Logprobs) > 0 && !r.Done {
+							logprobRes := res
+							logprobRes.Message.Content = ""
+							logprobRes.Message.ToolCalls = nil
+							ch <- logprobRes
+						}
+
 						if r.Done {
 							res.Message.Content = toolParser.Content()
 							ch <- res
@@ -2385,3 +2394,4 @@ func filterThinkTags(msgs []api.Message, m *Model) []api.Message {
 	}
 	return msgs
 }
+
