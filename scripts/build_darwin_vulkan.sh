@@ -219,6 +219,9 @@ _build_macapp() {
     else
         echo "WARNING: Code signing disabled, this bundle will not work for upgrade testing"
     fi
+    
+    rm -rf dist/OllamaGPU.app
+    mv dist/Ollama.app dist/OllamaGPU.app
 }
 
 if [ "$#" -eq 0 ]; then
