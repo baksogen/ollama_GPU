@@ -66,6 +66,9 @@ _build_darwin() {
             CMAKE_ARCH=arm64
         fi
 
+        # Pin MoltenVK explicitly so stale CMake caches (e.g. from prior
+        # reference-branch builds in the same build dir) can't silently downgrade
+        # the version and trip the SHA256 lookup in OllamaMoltenVKVersion.cmake.
         cmake -S . -B "$BUILD_DIR" \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES=$CMAKE_ARCH \
@@ -77,6 +80,7 @@ _build_darwin() {
             -DOLLAMA_MLX_BACKENDS= \
             -DOLLAMA_LLAMA_BACKENDS=vulkan \
             -DOLLAMA_FETCH_MOLTENVK=ON \
+            -DOLLAMA_MOLTENVK_VERSION=1.4.1 \
             -DFETCHCONTENT_SOURCE_DIR_LLAMA_CPP=$LLAMA_CPP_SHARED_SRC
 
         GOOS=darwin GOARCH=$ARCH CGO_ENABLED=1 \
