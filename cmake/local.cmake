@@ -102,6 +102,11 @@ else()
     set(OLLAMA_MLX_BACKENDS "${OLLAMA_MLX_BACKENDS}" CACHE STRING "${_ollama_mlx_backends_doc}")
 endif()
 
+if(OLLAMA_FETCH_MOLTENVK)
+    include(OllamaMoltenVK)
+    ollama_configure_moltenvk()
+endif()
+
 if(NOT OLLAMA_HAVE_LLAMA_SERVER)
     if(OLLAMA_LLAMA_BACKENDS)
         message(FATAL_ERROR "llama/server is required when OLLAMA_LLAMA_BACKENDS is set")
@@ -361,7 +366,7 @@ function(ollama_rocm_preset backend output)
 endfunction()
 
 function(ollama_add_llama_server_build name)
-    cmake_parse_arguments(ARG "" "PRESET;RUNNER_DIR" "TARGETS;CMAKE_ARGS" ${ARGN})
+    cmake_parse_arguments(ARG "" "PRESET;RUNNER_DIR" "TARGETS;CMAKE_ARGS;CONFIGURE_ENV" ${ARGN})
     if(NOT ARG_TARGETS)
         message(FATAL_ERROR "ollama_add_llama_server_build(${name}) requires TARGETS")
     endif()
@@ -412,13 +417,20 @@ function(ollama_add_llama_server_build name)
             list(APPEND _generator_args -T cuda=${_cuda_root})
         endif()
     endif()
-    set(_configure_command ${CMAKE_COMMAND}
+    # Optional env-var wrapper (e.g. VULKAN_SDK) for the nested configure step.
+    # ExternalProject subprocesses do not reliably inherit env vars set during
+    # the parent configure step, so callers must pass them explicitly here.
+    set(_configure_env_wrapper)
+    if(ARG_CONFIGURE_ENV)
+        set(_configure_env_wrapper ${CMAKE_COMMAND} -E env ${ARG_CONFIGURE_ENV})
+    endif()
+    set(_configure_command ${_configure_env_wrapper} ${CMAKE_COMMAND}
         ${_generator_args}
         -S ${CMAKE_SOURCE_DIR}/llama/server
         -B <BINARY_DIR>
         ${_cmake_args})
     if(ARG_PRESET)
-        set(_configure_command ${CMAKE_COMMAND}
+        set(_configure_command ${_configure_env_wrapper} ${CMAKE_COMMAND}
             ${_generator_args}
             -S ${CMAKE_SOURCE_DIR}/llama/server
             --preset ${ARG_PRESET}
@@ -673,14 +685,27 @@ if(OLLAMA_HAVE_LLAMA_SERVER)
                 CMAKE_ARGS ${_rocm_args})
             list(APPEND _backend_targets ollama-llama-server-${_backend})
         elseif(_backend STREQUAL "vulkan")
+            set(_vulkan_cmake_args
+                -DBUILD_SHARED_LIBS=ON
+                -DGGML_BACKEND_DL=ON
+                -DGGML_VULKAN=ON
+                -DOLLAMA_GPU_BACKEND=vulkan)
+            set(_vulkan_configure_env)
+            if(OLLAMA_FETCH_MOLTENVK AND OLLAMA_MOLTENVK_SDK_DIR)
+                # Propagate the MoltenVK SDK resolved by ollama_configure_moltenvk()
+                # to the nested llama-server build. VULKAN_SDK drives the existing
+                # SPIRV-Headers/CMAKE_PREFIX_PATH logic in llama/server/CMakeLists.txt,
+                # while Vulkan_INCLUDE_DIR/Vulkan_LIBRARY let find_package(Vulkan)
+                # pick up libMoltenVK.dylib (which does not ship as libvulkan).
+                ollama_append_cache_arg_if_set(_vulkan_cmake_args Vulkan_INCLUDE_DIR)
+                ollama_append_cache_arg_if_set(_vulkan_cmake_args Vulkan_LIBRARY)
+                set(_vulkan_configure_env "VULKAN_SDK=${OLLAMA_MOLTENVK_SDK_DIR}")
+            endif()
             ollama_add_llama_server_build(vulkan
                 RUNNER_DIR vulkan
                 TARGETS ggml-vulkan
-                CMAKE_ARGS
-                    -DBUILD_SHARED_LIBS=ON
-                    -DGGML_BACKEND_DL=ON
-                    -DGGML_VULKAN=ON
-                    -DOLLAMA_GPU_BACKEND=vulkan)
+                CMAKE_ARGS ${_vulkan_cmake_args}
+                CONFIGURE_ENV ${_vulkan_configure_env})
             list(APPEND _backend_targets ollama-llama-server-vulkan)
         elseif(_backend STREQUAL "cuda_jetpack5")
             if(CMAKE_CUDA_ARCHITECTURES)

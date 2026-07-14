@@ -30,6 +30,9 @@ if(GGML_VULKAN AND DEFINED ENV{VULKAN_SDK})
     # directories that CMake does not always find through the default prefix
     # search. Keep this narrow to the SDK layout so future llama.cpp bumps can
     # remove it if upstream's Vulkan dependency discovery becomes sufficient.
+    # MoltenVK (used when OLLAMA_FETCH_MOLTENVK=ON) does not bundle
+    # SPIRV-Headers, so also probe the Homebrew prefixes that the user is
+    # expected to install via `brew install spirv-headers` / vululkan-headers.
     file(TO_CMAKE_PATH "$ENV{VULKAN_SDK}" _ollama_vulkan_sdk)
     list(APPEND CMAKE_PREFIX_PATH "${_ollama_vulkan_sdk}")
     foreach(_ollama_spirv_headers_dir IN ITEMS
@@ -38,7 +41,13 @@ if(GGML_VULKAN AND DEFINED ENV{VULKAN_SDK})
             "${_ollama_vulkan_sdk}/share/cmake/SPIRV-Headers"
             "${_ollama_vulkan_sdk}/Lib/cmake"
             "${_ollama_vulkan_sdk}/lib/cmake"
-            "${_ollama_vulkan_sdk}/share/cmake")
+            "${_ollama_vulkan_sdk}/share/cmake"
+            "/usr/local/lib/cmake/vulkan/SPIRV-Headers"
+            "/usr/local/lib/cmake/SPIRV-Headers"
+            "/usr/local/share/cmake/SPIRV-Headers"
+            "/opt/homebrew/lib/cmake/vulkan/SPIRV-Headers"
+            "/opt/homebrew/lib/cmake/SPIRV-Headers"
+            "/opt/homebrew/share/cmake/SPIRV-Headers")
         if(EXISTS "${_ollama_spirv_headers_dir}/SPIRV-HeadersConfig.cmake")
             set(SPIRV-Headers_DIR "${_ollama_spirv_headers_dir}" CACHE PATH "SPIRV-Headers package directory")
             break()
@@ -501,6 +510,19 @@ if(OLLAMA_RUNNER_DIR)
                 RUNTIME DESTINATION "${_base_dest}/${OLLAMA_RUNNER_DIR}" COMPONENT llama-server
                 LIBRARY DESTINATION "${_base_dest}/${OLLAMA_RUNNER_DIR}" COMPONENT llama-server
             )
+            # When building against a MoltenVK SDK (VULKAN_SDK env var pointing at
+            # the extracted MoltenVK payload), bundle libMoltenVK.dylib next to
+            # ggml-vulkan so the runner resolves it via @loader_path at runtime.
+            if(DEFINED ENV{VULKAN_SDK})
+                file(TO_CMAKE_PATH "$ENV{VULKAN_SDK}" _ollama_moltenvk_sdk_dir)
+                set(_ollama_moltenvk_lib
+                    "${_ollama_moltenvk_sdk_dir}/dynamic/dylib/macOS/libMoltenVK.dylib")
+                if(EXISTS "${_ollama_moltenvk_lib}")
+                    install(FILES "${_ollama_moltenvk_lib}"
+                        DESTINATION "${_base_dest}/${OLLAMA_RUNNER_DIR}"
+                        COMPONENT llama-server)
+                endif()
+            endif()
         endif()
     endif()
 else()
