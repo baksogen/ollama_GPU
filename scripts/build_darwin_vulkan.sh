@@ -97,11 +97,13 @@ _merge_darwin_payload() {
 
     # libggml-vulkan.so is per-arch and the AMD GPU path is Intel-only, so ship
     # the amd64 payload. libMoltenVK.dylib is already universal in that bundle.
+    # GPU backends install under a vulkan/ subdir; use -a so the subdir (and
+    # any versioned dylib symlinks) copies through, not just the top-level files.
     SRC=dist/darwin-amd64/lib/ollama
     if [ -d "$SRC" ]; then
         for F in "$SRC"/*; do
             [ -e "$F" ] || continue
-            cp -P "$F" dist/darwin/lib/ollama/
+            cp -a "$F" dist/darwin/lib/ollama/
         done
     fi
 }
