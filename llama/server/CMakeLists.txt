@@ -5,6 +5,14 @@ project(ollama-llama-server C CXX)
 # single architecture different from the host, make downstream architecture
 # detection match the target slice. ggml uses CMAKE_SYSTEM_PROCESSOR to decide
 # which CPU backend variants to build.
+#
+# CMAKE_CROSSCOMPILING is also set explicitly because macOS universal-binary
+# support masks single-arch cross-builds from CMake's automatic detection,
+# which only fires when CMAKE_SYSTEM_NAME differs from CMAKE_HOST_SYSTEM_NAME.
+# llama.cpp's tools/ui/CMakeLists.txt checks CMAKE_CROSSCOMPILING to fall back
+# to a host-compiler-built llama-ui-embed that can actually run on the build
+# host; without this, building arm64 llama-server on an x86_64 Mac fails with
+# EBADARCH (-86) when the arm64 llama-ui-embed helper tries to execute.
 if(CMAKE_OSX_ARCHITECTURES AND NOT CMAKE_OSX_ARCHITECTURES MATCHES ";")
     if(CMAKE_OSX_ARCHITECTURES STREQUAL "x86_64" AND NOT CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
         message(STATUS "Cross-compiling for x86_64: overriding CMAKE_SYSTEM_PROCESSOR from ${CMAKE_SYSTEM_PROCESSOR} to x86_64")
@@ -12,6 +20,9 @@ if(CMAKE_OSX_ARCHITECTURES AND NOT CMAKE_OSX_ARCHITECTURES MATCHES ";")
     elseif(CMAKE_OSX_ARCHITECTURES STREQUAL "arm64" AND NOT CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
         message(STATUS "Cross-compiling for arm64: overriding CMAKE_SYSTEM_PROCESSOR from ${CMAKE_SYSTEM_PROCESSOR} to arm64")
         set(CMAKE_SYSTEM_PROCESSOR "arm64")
+    endif()
+    if(NOT CMAKE_OSX_ARCHITECTURES STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
+        set(CMAKE_CROSSCOMPILING TRUE)
     endif()
 endif()
 
