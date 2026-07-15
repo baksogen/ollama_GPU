@@ -194,6 +194,15 @@ func init() {
 		return
 	}
 
+	// MLX Metal requires Apple Silicon; on Intel Macs any libmlxc.dylib in
+	// the payload is either stale or built for arm64. Loading it only produces
+	// CHECK failures from missing symbols and never yields a usable backend,
+	// so skip the search entirely and surface MLX as unavailable via CheckInit.
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
+		initError = fmt.Errorf("MLX requires Apple Silicon (not available on Intel Mac)")
+		return
+	}
+
 	// OLLAMA_LLM_LIBRARY overrides variant selection (e.g., "mlx_metal_v3").
 	// When set to an mlx_* value, only that specific subdir is tried.
 	// The GGML runner ignores mlx_* values (see discover/runner.go).
