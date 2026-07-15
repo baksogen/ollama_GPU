@@ -99,10 +99,16 @@ _merge_darwin_payload() {
     # the amd64 payload. libMoltenVK.dylib is already universal in that bundle.
     # GPU backends install under a vulkan/ subdir; use -a so the subdir (and
     # any versioned dylib symlinks) copies through, not just the top-level files.
+    # Skip libmlx*/libmlxc* — this build targets Intel Macs where MLX Metal is
+    # unavailable, and any such files in the amd64 payload are stale leftovers
+    # from a prior arm64/MLX build that would fail symbol checks at load time.
     SRC=dist/darwin-amd64/lib/ollama
     if [ -d "$SRC" ]; then
         for F in "$SRC"/*; do
             [ -e "$F" ] || continue
+            case "$(basename "$F")" in
+                libmlx*.dylib|libmlxc*.dylib) continue ;;
+            esac
             cp -a "$F" dist/darwin/lib/ollama/
         done
     fi
