@@ -266,9 +266,15 @@ func parseLlamaServerDevicesWithNative(output, nativeOutput string, libDirs []st
 	}
 	cudaRuntimeMajor, cudaRuntimeMinor, hasCUDARuntime := cudaRuntimeVersion(libDirs)
 
-	// Parse stdout device lines
+	// Parse stdout device lines. llama-server --list-devices interleaves all
+	// backends in one list (BLAS, Vulkan0, CUDA0, ...) but the per-backend
+	// metadata maps (ccByIndex, gfxByIndex, integratedByIndex) and the
+	// *_VISIBLE_DEVICES env vars are keyed per-library. A single global counter
+	// drifts whenever a 0 MiB pseudo-device (BLAS/Accelerate) is skipped, so
+	// Vulkan0 would end up with ID "1" and GGML_VK_VISIBLE_DEVICES=1, which the
+	// Vulkan backend rejects (only device 0 exists), forcing a CPU fallback.
+	libraryIndex := map[string]int{}
 	var devices []ml.DeviceInfo
-	deviceIndex := 0
 	scanner = bufio.NewScanner(strings.NewReader(output))
 	for scanner.Scan() {
 		matches := deviceLineRegex.FindStringSubmatch(scanner.Text())
@@ -287,19 +293,20 @@ func parseLlamaServerDevicesWithNative(output, nativeOutput string, libDirs []st
 		// as inference compute devices or inflate the scheduler's GPU count.
 		if totalMiB == 0 {
 			slog.Debug("skipping pseudo-device with zero memory", "name", name, "description", description)
-			deviceIndex++
 			continue
 		}
 
+		idx := libraryIndex[library]
+
 		// For CUDA devices, check if this variant supports the device's CC
 		if library == "CUDA" {
-			cc, ok := ccByIndex[deviceIndex]
+			cc, ok := ccByIndex[idx]
 			if ok && len(cudaArchSet) > 0 {
 				if !cudaArchSet[cc.arch] {
 					slog.Info("skipping CUDA device — compute capability not in compiled architectures",
 						"device", description, "cc", cc.arch, "archs", cudaArchs,
 						"libDirs", libDirs)
-					deviceIndex++
+					libraryIndex[library] = idx + 1
 					continue
 				}
 			} else if !ok {
@@ -315,15 +322,15 @@ func parseLlamaServerDevicesWithNative(output, nativeOutput string, libDirs []st
 			}
 		}
 
-		nativeDevice, hasNativeDevice := nativeByIndex[library][deviceIndex]
+		nativeDevice, hasNativeDevice := nativeByIndex[library][idx]
 		totalBytes := totalMiB * 1024 * 1024
 		if hasNativeDevice && !nativeProbeMatchesLlamaServerDevice(library, description, totalBytes, nativeDevice) {
 			hasNativeDevice = false
 		}
-		computeMajor, computeMinor := computeVersion(library, deviceIndex, gfxByIndex, ccByIndex)
+		computeMajor, computeMinor := computeVersion(library, idx, gfxByIndex, ccByIndex)
 		dev := ml.DeviceInfo{
 			DeviceID: ml.DeviceID{
-				ID:      strconv.Itoa(deviceIndex),
+				ID:      strconv.Itoa(idx),
 				Library: library,
 			},
 			Name:         name,
@@ -333,8 +340,8 @@ func parseLlamaServerDevicesWithNative(output, nativeOutput string, libDirs []st
 			ComputeMajor: computeMajor,
 			ComputeMinor: computeMinor,
 			LibraryPath:  libDirs,
-			GFXTarget:    gfxByIndex[deviceIndex],
-			Integrated:   isIntegratedLlamaServerDevice(library, deviceIndex, integratedByIndex),
+			GFXTarget:    gfxByIndex[idx],
+			Integrated:   isIntegratedLlamaServerDevice(library, idx, integratedByIndex),
 		}
 		if hasNativeDevice {
 			if nativeDevice.DeviceID != "" {
@@ -365,7 +372,7 @@ func parseLlamaServerDevicesWithNative(output, nativeOutput string, libDirs []st
 		}
 
 		devices = append(devices, dev)
-		deviceIndex++
+		libraryIndex[library] = idx + 1
 	}
 
 	return refineLlamaServerDevices(devices, libDirs)
