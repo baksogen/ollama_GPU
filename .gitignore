@@ -17,3 +17,5 @@ llama/vendor
 /ollama
 integration/testdata/models/
 ml/backend/ggml/ggml/src/ggml-vulkan/*-prefix/
+.claude/
+app/assetsOrig/
