@@ -34,7 +34,7 @@ upstream's non-conflicting changes on top.
 - `cmake/local.cmake` — calls `ollama_configure_moltenvk()` and threads `VULKAN_SDK` / `Vulkan_INCLUDE_DIR` / `Vulkan_LIBRARY` into the nested llama-server build via `CONFIGURE_ENV`
 - `llama/server/CMakeLists.txt` — adds `CONFIGURE_ENV` argument to `ollama_add_llama_server_build`, passes Vulkan env to the ExternalProject subprocess
 - `discover/llama_server.go` — **per-library device index** instead of a global counter (the key runtime fix; without it, skipping BLAS pseudo-devices drifts the index and Vulkan0 gets `GGML_VK_VISIBLE_DEVICES=1`, which the backend rejects, falling back to CPU)
-- `x/mlxrunner/mlx/dynamic.go` — skips MLX dynamic load on `darwin/amd64` and sets `initError` so `CheckInit()` reports MLX unavailable (MLX Metal requires Apple Silicon)
+- `mlx/dynamic.go` — skips MLX dynamic load on `darwin/amd64` and sets `initError` so `CheckInit()` reports MLX unavailable (MLX Metal requires Apple Silicon). NOTE: upstream restructured `x/mlxrunner/mlx/dynamic.go` into `mlx/dynamic.go` (Oct 2026 merge); git rename-detection carried the patch to the new path automatically.
 - `README.md` — documents the experimental MoltenVK build
 - `.gitignore` — ignores `.claude/` and `app/assetsOrig/`
 - `app/assets/{app,tray,tray_upgrade}.ico` + `app/assets/setup.bmp` — updated icons for the modified build
@@ -85,7 +85,7 @@ If upstream refactors this function, re-apply the pattern:
   `nativeByIndex`) use `idx`, not a global counter
 - `deviceIndex++` at loop end becomes `libraryIndex[library] = idx + 1`
 
-#### `x/mlxrunner/mlx/dynamic.go`
+#### `mlx/dynamic.go` (was `x/mlxrunner/mlx/dynamic.go` before the Oct 2026 upstream restructure)
 The `init()` function has an early return on `darwin/amd64` that sets
 `initError = fmt.Errorf("MLX requires Apple Silicon (not available on Intel Mac)")`.
 This must stay so `CheckInit()` returns an error and the mlxrunner
@@ -128,8 +128,8 @@ merge if needed.
 
 ### 5. Verify the merge compiles
 ```sh
-go build ./discover/ ./x/mlxrunner/...
-go test ./discover/ ./x/mlxrunner/...
+go build ./discover/ ./mlx/...
+go test ./discover/ ./mlx/...
 go build .
 ```
 If any package fails to build, the conflict resolution missed
