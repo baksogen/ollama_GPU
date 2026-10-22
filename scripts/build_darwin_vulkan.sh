@@ -80,7 +80,7 @@ _build_darwin() {
             -DOLLAMA_MLX_BACKENDS= \
             -DOLLAMA_LLAMA_BACKENDS=vulkan \
             -DOLLAMA_FETCH_MOLTENVK=ON \
-            -DOLLAMA_MOLTENVK_VERSION=1.4.1 \
+            -DOLLAMA_MOLTENVK_VERSION=1.4.2 \
             -DFETCHCONTENT_SOURCE_DIR_LLAMA_CPP=$LLAMA_CPP_SHARED_SRC
 
         GOOS=darwin GOARCH=$ARCH CGO_ENABLED=1 \
@@ -183,73 +183,75 @@ _build_macapp() {
     cd ../../..
 
     # Build the Ollama.app bundle
-    rm -rf dist/Ollama.app
-    cp -a ./app/darwin/Ollama.app dist/Ollama.app
+    rm -rf dist/OllamaGPU.app
+    cp -a ./app/darwin/Ollama.app dist/OllamaGPU.app
 
     # update the modified date of the app bundle to now
-    touch dist/Ollama.app
+    touch dist/OllamaGPU.app
 
     go clean -cache
     GOARCH=amd64 CGO_ENABLED=1 GOOS=darwin go build -o dist/darwin-app-amd64 -ldflags="-s -w -X=github.com/ollama/ollama/app/version.Version=${VERSION}" ./app/cmd/app
     GOARCH=arm64 CGO_ENABLED=1 GOOS=darwin go build -o dist/darwin-app-arm64 -ldflags="-s -w -X=github.com/ollama/ollama/app/version.Version=${VERSION}" ./app/cmd/app
-    mkdir -p dist/Ollama.app/Contents/MacOS
-    lipo -create -output dist/Ollama.app/Contents/MacOS/Ollama dist/darwin-app-amd64 dist/darwin-app-arm64
+    mkdir -p dist/OllamaGPU.app/Contents/MacOS
+    lipo -create -output dist/OllamaGPU.app/Contents/MacOS/Ollama dist/darwin-app-amd64 dist/darwin-app-arm64
     rm -f dist/darwin-app-amd64 dist/darwin-app-arm64
 
     # Create a mock Squirrel.framework bundle
-    mkdir -p dist/Ollama.app/Contents/Frameworks/Squirrel.framework/Versions/A/Resources/
-    cp -a dist/Ollama.app/Contents/MacOS/Ollama dist/Ollama.app/Contents/Frameworks/Squirrel.framework/Versions/A/Squirrel
-    ln -s ../Squirrel dist/Ollama.app/Contents/Frameworks/Squirrel.framework/Versions/A/Resources/ShipIt
-    cp -a ./app/cmd/squirrel/Info.plist dist/Ollama.app/Contents/Frameworks/Squirrel.framework/Versions/A/Resources/Info.plist
-    ln -s A dist/Ollama.app/Contents/Frameworks/Squirrel.framework/Versions/Current
-    ln -s Versions/Current/Resources dist/Ollama.app/Contents/Frameworks/Squirrel.framework/Resources
-    ln -s Versions/Current/Squirrel dist/Ollama.app/Contents/Frameworks/Squirrel.framework/Squirrel
+    mkdir -p dist/OllamaGPU.app/Contents/Frameworks/Squirrel.framework/Versions/A/Resources/
+    cp -a dist/OllamaGPU.app/Contents/MacOS/Ollama dist/OllamaGPU.app/Contents/Frameworks/Squirrel.framework/Versions/A/Squirrel
+    ln -s ../Squirrel dist/OllamaGPU.app/Contents/Frameworks/Squirrel.framework/Versions/A/Resources/ShipIt
+    cp -a ./app/cmd/squirrel/Info.plist dist/OllamaGPU.app/Contents/Frameworks/Squirrel.framework/Versions/A/Resources/Info.plist
+    ln -s A dist/OllamaGPU.app/Contents/Frameworks/Squirrel.framework/Versions/Current
+    ln -s Versions/Current/Resources dist/OllamaGPU.app/Contents/Frameworks/Squirrel.framework/Resources
+    ln -s Versions/Current/Squirrel dist/OllamaGPU.app/Contents/Frameworks/Squirrel.framework/Squirrel
 
     # Update the version in the Info.plist
-    plutil -replace CFBundleShortVersionString -string "$VERSION" dist/Ollama.app/Contents/Info.plist
-    plutil -replace CFBundleVersion -string "$VERSION" dist/Ollama.app/Contents/Info.plist
+    plutil -replace CFBundleShortVersionString -string "$VERSION" dist/OllamaGPU.app/Contents/Info.plist
+    plutil -replace CFBundleVersion -string "$VERSION" dist/OllamaGPU.app/Contents/Info.plist
+    plutil -replace CFBundleName -string "OllamaGPU" dist/OllamaGPU.app/Contents/Info.plist
+    plutil -replace CFBundleDisplayName -string "OllamaGPU" dist/OllamaGPU.app/Contents/Info.plist
 
     # Setup the ollama binaries
-    mkdir -p dist/Ollama.app/Contents/Resources
+    mkdir -p dist/OllamaGPU.app/Contents/Resources
     [ -d dist/darwin/lib/ollama ] || _merge_darwin_payload
-    cp -a dist/darwin/ollama dist/Ollama.app/Contents/Resources/ollama
-    cp dist/darwin/llama-server dist/Ollama.app/Contents/Resources/
-    cp dist/darwin/llama-quantize dist/Ollama.app/Contents/Resources/
+    cp -a dist/darwin/ollama dist/OllamaGPU.app/Contents/Resources/ollama
+    cp dist/darwin/llama-server dist/OllamaGPU.app/Contents/Resources/
+    cp dist/darwin/llama-quantize dist/OllamaGPU.app/Contents/Resources/
     if [ -d dist/darwin/lib/ollama ]; then
-        cp -a dist/darwin/lib/ollama/. dist/Ollama.app/Contents/Resources/
+        cp -a dist/darwin/lib/ollama/. dist/OllamaGPU.app/Contents/Resources/
     fi
     # Flatten the vulkan/ subdir alongside the other resources so the runner
     # discovers libggml-vulkan.so and libMoltenVK.dylib next to llama-server.
-    if [ -d dist/Ollama.app/Contents/Resources/vulkan ]; then
-        cp -a dist/Ollama.app/Contents/Resources/vulkan/. dist/Ollama.app/Contents/Resources/
-        rm -rf dist/Ollama.app/Contents/Resources/vulkan
+    if [ -d dist/OllamaGPU.app/Contents/Resources/vulkan ]; then
+        cp -a dist/OllamaGPU.app/Contents/Resources/vulkan/. dist/OllamaGPU.app/Contents/Resources/
+        rm -rf dist/OllamaGPU.app/Contents/Resources/vulkan
     fi
-    chmod a+x dist/Ollama.app/Contents/Resources/ollama
+    chmod a+x dist/OllamaGPU.app/Contents/Resources/ollama
 
     # Sign
     if [ -n "$APPLE_IDENTITY" ]; then
-        codesign -f --timestamp -s "$APPLE_IDENTITY" --identifier ai.ollama.ollama --options=runtime dist/Ollama.app/Contents/Resources/ollama
-        codesign -f --timestamp -s "$APPLE_IDENTITY" --identifier ai.ollama.ollama --options=runtime dist/Ollama.app/Contents/Resources/llama-server
-        codesign -f --timestamp -s "$APPLE_IDENTITY" --identifier ai.ollama.ollama --options=runtime dist/Ollama.app/Contents/Resources/llama-quantize
-        for lib in dist/Ollama.app/Contents/Resources/*.so dist/Ollama.app/Contents/Resources/*.dylib; do
+        codesign -f --timestamp -s "$APPLE_IDENTITY" --identifier ai.ollama.ollama --options=runtime dist/OllamaGPU.app/Contents/Resources/ollama
+        codesign -f --timestamp -s "$APPLE_IDENTITY" --identifier ai.ollama.ollama --options=runtime dist/OllamaGPU.app/Contents/Resources/llama-server
+        codesign -f --timestamp -s "$APPLE_IDENTITY" --identifier ai.ollama.ollama --options=runtime dist/OllamaGPU.app/Contents/Resources/llama-quantize
+        for lib in dist/OllamaGPU.app/Contents/Resources/*.so dist/OllamaGPU.app/Contents/Resources/*.dylib; do
             [ -f "$lib" ] || continue
             codesign -f --timestamp -s "$APPLE_IDENTITY" --identifier ai.ollama.ollama --options=runtime "$lib"
         done
-        codesign -f --timestamp -s "$APPLE_IDENTITY" --identifier com.electron.ollama --deep --options=runtime dist/Ollama.app
+        codesign -f --timestamp -s "$APPLE_IDENTITY" --identifier com.electron.ollama --deep --options=runtime dist/OllamaGPU.app
     fi
 
-    rm -f dist/Ollama-darwin.zip
-    ditto -c -k --norsrc --keepParent dist/Ollama.app dist/Ollama-darwin.zip
-    (cd dist/Ollama.app/Contents/Resources/; tar -cf - ollama llama-server llama-quantize *.so *.dylib 2>/dev/null) | gzip -9vc > dist/ollama-darwin.tgz
+    rm -f dist/OllamaGPU-darwin.zip
+    ditto -c -k --norsrc --keepParent dist/OllamaGPU.app dist/OllamaGPU-darwin.zip
+    (cd dist/OllamaGPU.app/Contents/Resources/; tar -cf - ollama llama-server llama-quantize *.so *.dylib 2>/dev/null) | gzip -9vc > dist/ollama-darwin.tgz
 
     # Notarize and Staple
     if [ -n "$APPLE_IDENTITY" ]; then
-        $(xcrun -f notarytool) submit dist/Ollama-darwin.zip --wait --timeout 20m --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID"
-        rm -f dist/Ollama-darwin.zip
-        $(xcrun -f stapler) staple dist/Ollama.app
-        ditto -c -k --norsrc --keepParent dist/Ollama.app dist/Ollama-darwin.zip
+        $(xcrun -f notarytool) submit dist/OllamaGPU-darwin.zip --wait --timeout 20m --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID"
+        rm -f dist/OllamaGPU-darwin.zip
+        $(xcrun -f stapler) staple dist/OllamaGPU.app
+        ditto -c -k --norsrc --keepParent dist/OllamaGPU.app dist/OllamaGPU-darwin.zip
 
-        rm -f dist/Ollama.dmg
+        rm -f dist/OllamaGPU.dmg
 
         (cd dist && ../scripts/create-dmg.sh \
             --volname "${VOL_NAME}" \
@@ -258,18 +260,18 @@ _build_macapp() {
             --window-pos 200 120 \
             --window-size 800 400 \
             --icon-size 128 \
-            --icon "Ollama.app" 200 190 \
-            --hide-extension "Ollama.app" \
+            --icon "OllamaGPU.app" 200 190 \
+            --hide-extension "OllamaGPU.app" \
             --app-drop-link 600 190 \
             --text-size 12 \
-            "Ollama.dmg" \
-            "Ollama.app" \
+            "OllamaGPU.dmg" \
+            "OllamaGPU.app" \
         ; )
         rm -f dist/rw*.dmg
 
-        codesign -f --timestamp -s "$APPLE_IDENTITY" --identifier ai.ollama.ollama --options=runtime dist/Ollama.dmg
-        $(xcrun -f notarytool) submit dist/Ollama.dmg --wait --timeout 20m --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID"
-        $(xcrun -f stapler) staple dist/Ollama.dmg
+        codesign -f --timestamp -s "$APPLE_IDENTITY" --identifier ai.ollama.ollama --options=runtime dist/OllamaGPU.dmg
+        $(xcrun -f notarytool) submit dist/OllamaGPU.dmg --wait --timeout 20m --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID"
+        $(xcrun -f stapler) staple dist/OllamaGPU.dmg
     else
         echo "WARNING: Code signing disabled, this bundle will not work for upgrade testing"
     fi

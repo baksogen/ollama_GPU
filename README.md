@@ -34,8 +34,9 @@ To build app bundles with this backend:
    ```bash
    ./scripts/build_darwin_vulkan.sh
    ```
-The resulting `dist/` folder contains the standard `Ollama.app`, but with the MoltenVK backend enabled.
+The resulting `dist/` folder contains `OllamaGPU.app`, but with the MoltenVK backend enabled.
 It should technically work on both Apple Silicon & Intel Macs, but is optimised for Intel Macs with AMD GPUs and will *probably* have worse performance in most use-cases on Apple Silicon.
+> The build pins MoltenVK 1.4.2 — 1.4.1 misreports AMD `maxSubgroupSize` (64 instead of 32), which corrupts generation output (garbage text) on models using gated delta net (Qwen3.x hybrid) and flash attention. See [KhronosGroup/MoltenVK#2755](https://github.com/KhronosGroup/MoltenVK/pull/2755).
 
 ### Windows
 

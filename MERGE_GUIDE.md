@@ -25,7 +25,7 @@ upstream's non-conflicting changes on top.
 
 ### New files (no conflict expected unless upstream adds a same-named file)
 - `cmake/OllamaMoltenVK.cmake` — MoltenVK download with SHA256 verification
-- `cmake/OllamaMoltenVKVersion.cmake` — pins MoltenVK version (currently 1.4.1)
+- `cmake/OllamaMoltenVKVersion.cmake` — pins MoltenVK version (currently 1.4.2; 1.4.1 is known-broken on AMD, see below)
 - `scripts/build_darwin_vulkan.sh` — full build + packaging script for the Vulkan/MoltenVK variant
 
 ### Modified files (likely conflict zones)
@@ -155,9 +155,12 @@ Do NOT push to `ModGPU` or `OllamaOrigin` — those are upstream.
 ./scripts/build_darwin_vulkan.sh
 ```
 This builds both arches (arm64 + amd64), merges the amd64 Vulkan
-payload, creates the universal binary, and packages `Ollama.app`
+payload, creates the universal binary, and packages `OllamaGPU.app`
 into `dist/`. The script handles:
-- MoltenVK fetch + SHA256 verification (pinned to 1.4.1)
+- MoltenVK fetch + SHA256 verification (pinned to 1.4.2; do NOT downgrade to
+  1.4.1 — it misreports AMD maxSubgroupSize as 64 instead of 32, which corrupts
+  Vulkan inference output on Qwen3.x GDN models and FA on AMD GPUs.
+  See KhronosGroup/MoltenVK#2755, ggml-org/llama.cpp#20029)
 - Vulkan backend build via `OLLAMA_LLAMA_BACKENDS=vulkan`
 - MLX disabled (`OLLAMA_MLX_BACKENDS=` empty)
 - Stale MLX library filtering in `_merge_darwin_payload`
@@ -183,7 +186,7 @@ After the merge and build, verify:
 4. **GPU inference** — load a GGUF model and check `inference compute`
    log line shows `library=Vulkan` (not CPU). The `filter_id` should
    match the per-library Vulkan index (0 for a single GPU).
-5. **App bundle** — `dist/Ollama.app/Contents/Resources/` contains
+5. **App bundle** — `dist/OllamaGPU.app/Contents/Resources/` contains
    `libMoltenVK.dylib` and `libggml-vulkan.so` but NOT `libmlx.dylib`
    or `libmlxc.dylib`.
 
