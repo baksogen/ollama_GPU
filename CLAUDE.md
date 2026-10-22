@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-See `AGENTS.md` for the shared agent build instructions. See `docs/development.md` for full platform/build prerequisites and `llama/README.md` for the llama.cpp update workflow.
+See `AGENTS.md` for the shared agent build instructions. See `docs/development.md` for full platform/build prerequisites and `llama/README.md` for the llama.cpp update workflow. This fork carries MoltenVK/Vulkan GPU patches for Intel Macs: when merging upstream Ollama, follow `MERGE_GUIDE.md` and run `scripts/audit_gpu_patches.sh` before committing the merge.
 
 ## Build
 

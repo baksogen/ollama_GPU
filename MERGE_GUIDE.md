@@ -25,8 +25,10 @@ upstream's non-conflicting changes on top.
 
 ### New files (no conflict expected unless upstream adds a same-named file)
 - `cmake/OllamaMoltenVK.cmake` — MoltenVK download with SHA256 verification
-- `cmake/OllamaMoltenVKVersion.cmake` — pins MoltenVK version (currently 1.4.2; 1.4.1 is known-broken on AMD, see below)
-- `scripts/build_darwin_vulkan.sh` — full build + packaging script for the Vulkan/MoltenVK variant
+- `cmake/OllamaMoltenVKVersion.cmake` — version → SHA256 map (has 1.4.2; 1.4.1 is known-broken on AMD, see "Known pitfalls")
+- `scripts/build_darwin_vulkan.sh` — full build + packaging script for the Vulkan/MoltenVK variant; pins `OLLAMA_MOLTENVK_VERSION=1.4.2` and packages the app as **`dist/OllamaGPU.app`** (NOT `Ollama.app`)
+- `scripts/audit_gpu_patches.sh` — post-merge audit; verifies every GPU patch survived (see step 5 of the workflow)
+- `MERGE_GUIDE.md` — this file
 
 ### Modified files (likely conflict zones)
 - `CMakeLists.txt` — adds `OLLAMA_FETCH_MOLTENVK` option and `cmake/` to module path
@@ -35,8 +37,9 @@ upstream's non-conflicting changes on top.
 - `llama/server/CMakeLists.txt` — adds `CONFIGURE_ENV` argument to `ollama_add_llama_server_build`, passes Vulkan env to the ExternalProject subprocess
 - `discover/llama_server.go` — **per-library device index** instead of a global counter (the key runtime fix; without it, skipping BLAS pseudo-devices drifts the index and Vulkan0 gets `GGML_VK_VISIBLE_DEVICES=1`, which the backend rejects, falling back to CPU)
 - `mlx/dynamic.go` — skips MLX dynamic load on `darwin/amd64` and sets `initError` so `CheckInit()` reports MLX unavailable (MLX Metal requires Apple Silicon). NOTE: upstream restructured `x/mlxrunner/mlx/dynamic.go` into `mlx/dynamic.go` (Oct 2026 merge); git rename-detection carried the patch to the new path automatically.
-- `README.md` — documents the experimental MoltenVK build
+- `README.md` — documents the experimental MoltenVK build (incl. the 1.4.2 pin note)
 - `.gitignore` — ignores `.claude/` and `app/assetsOrig/`
+- `CLAUDE.md` — keeps the pointer to this guide (upstream maintains its own CLAUDE.md — merge both, keep our merge-workflow sentence)
 - `app/assets/{app,tray,tray_upgrade}.ico` + `app/assets/setup.bmp` — updated icons for the modified build
 
 ## Merge workflow
@@ -59,7 +62,7 @@ This keeps `feature/moltenvk-intel-amd` untouched until the merge is verified.
 ```sh
 git merge ModGPU/main --no-edit
 ```
-Prefer a merge commit over a rebase — the branch has 13+ commits and
+Prefer a merge commit over a rebase — the branch has 14+ GPU commits and
 rebase would rewrite history, requiring a force-push to `origin`.
 
 ### 4. Resolve conflicts
@@ -120,13 +123,30 @@ restructures the README, re-add the section in an appropriate place.
 #### `.gitignore`
 Keep `.claude/` and `app/assetsOrig/` entries.
 
+#### `CLAUDE.md`
+Upstream now maintains its own CLAUDE.md, so this WILL conflict on merges.
+Keep upstream's content and re-add our one-line pointer to `MERGE_GUIDE.md`
+in the intro paragraph (see the "See `AGENTS.md`…" paragraph).
+
 #### `app/assets/*` (binary)
 These are the user's custom icons. If upstream changes the same
 icons, keep the user's versions (they are the point of the fork's
 branding). Use `git checkout --ours -- app/assets/` during the
 merge if needed.
 
-### 5. Verify the merge compiles
+### 5. Audit the patches
+```sh
+./scripts/audit_gpu_patches.sh
+```
+Verifies in one shot: new GPU files exist, every file we modify still
+differs from both the merge base and upstream, and all critical code
+patterns (per-library device index, MLX guard, MoltenVK 1.4.2 pin,
+`CONFIGURE_ENV` threading, `OllamaGPU.app` naming, …) are present.
+**Every check must pass before committing the merge.** If a check fails,
+revisit the conflict resolution for that file (the audit prints which
+pattern is missing and where).
+
+### 6. Verify the merge compiles
 ```sh
 go build ./discover/ ./mlx/...
 go test ./discover/ ./mlx/...
@@ -135,15 +155,15 @@ go build .
 If any package fails to build, the conflict resolution missed
 something — re-examine the affected files.
 
-### 6. Fast-forward the feature branch
-Once the merge branch builds and tests pass:
+### 7. Fast-forward the feature branch
+Once the audit and the build/tests pass:
 ```sh
 git checkout feature/moltenvk-intel-amd
 git merge --ff-only merge/upstream-$(date +%Y%m%d)
 git branch -d merge/upstream-$(date +%Y%m%d)
 ```
 
-### 7. Push
+### 8. Push
 ```sh
 git push origin feature/moltenvk-intel-amd
 ```
@@ -189,8 +209,52 @@ After the merge and build, verify:
 5. **App bundle** — `dist/OllamaGPU.app/Contents/Resources/` contains
    `libMoltenVK.dylib` and `libggml-vulkan.so` but NOT `libmlx.dylib`
    or `libmlxc.dylib`.
+6. **MoltenVK version** — the same `--list-devices` output prints
+   `[mvk-info] MoltenVK version 1.4.2`. If it says 1.4.1, a stale
+   `build/darwin-*` cache or an old bundle is being used — clean and
+   rebuild (garbage output on AMD is guaranteed on 1.4.1).
+7. **Generation smoke test** — device discovery passing is NOT enough;
+   the 1.4.1 subgroup bug produced perfect device listings and garbage
+   text. Load a **GDN-hybrid model** (e.g. `orcarouter/Qwen3.8-27B-Uncensored:iq2_xxs`)
+   and confirm coherent output, e.g.:
+   ```sh
+   curl -s localhost:<port>/api/generate -d '{"model":"orcarouter/Qwen3.8-27B-Uncensored:iq2_xxs","prompt":"The capital of France is","stream":false,"think":false,"options":{"num_predict":20,"temperature":0}}'
+   ```
+   The answer must be sensible ("Paris"), not word salad / CJK noise.
+   Gotcha: thinking models put output into the `thinking` field unless
+   `think:false` is passed — an empty `response` with thinking output is
+   correct behavior, not a bug.
 
-## Quick reference: the 13 GPU commits
+## Known pitfalls (incident log)
+
+- **MoltenVK 1.4.1 on AMD = garbage output (RESOLVED 2026-10-22).** 1.4.1
+  misreported AMD `maxSubgroupSize` as 64 (real Metal simdgroup width is
+  32), corrupting subgroup-based Vulkan shaders: GDN-hybrid models
+  (Qwen3.x: qwen3next/qwen3.5/3.8 families) produced word salad on ANY
+  quant, and scalar flash attention was broken too. Standard-attention
+  models (gemma) were unaffected, and `--list-devices` looked perfectly
+  healthy — which is why checklist items 6–7 exist. Fixed upstream in
+  MoltenVK 1.4.2 (KhronosGroup/MoltenVK#2755); llama.cpp-side patches
+  (#20029, #23218) were never needed. NEVER downgrade the pin, and if a
+  future merge bumps MoltenVK, re-run the generation smoke test.
+- **Stale build dirs after big upstream merges.** `build/darwin-*`
+  CMake caches from before a large merge cause ghost errors —
+  `rm -rf build/darwin-arm64 build/darwin-amd64 build/darwin-sources` +
+  `rm -rf dist/darwin*` before a full rebuild.
+- **`dist/Ollama.app` no longer exists.** The bundle is
+  `dist/OllamaGPU.app` (CFBundleName=OllamaGPU), zip is
+  `OllamaGPU-darwin.zip`. The skeleton `app/darwin/Ollama.app` is
+  upstream's and stays untouched.
+- **`hdiutil: create failed - Operation not permitted`** when building
+  the DMG — stale macOS state; use another volume name:
+  `VOL_NAME="$(date)" ./scripts/build_darwin_vulkan.sh` (see the build
+  script header).
+- **llama.cpp upstream refactors.** `ollama_add_llama_server_build`
+  signature changes and the MLX package moves (x/mlxrunner → mlx) are
+  the two that have actually happened; the audit script's invariants
+  catch both.
+
+## Quick reference: the GPU commits
 
 ```
 4908338f cmake: add experimental MoltenVK support for Intel Mac AMD GPUs
@@ -206,7 +270,10 @@ fd51266c scripts: exclude stale MLX libraries from Vulkan build payload
 fe7c9d23 app: update icons for the MoltenVK Intel Mac variant
 2ede7167 CLAUDE.md: expand build, test, lint, and architecture guidance
 292ecf2a gitignore: ignore .claude/ and app/assetsOrig/
+7a75af133 vulkan: pin MoltenVK 1.4.2 and rename bundle to OllamaGPU.app
 ```
+(7a75af133 reached `feature/moltenvk-intel-amd` via merge commit 9098ad3bf,
+2026-10-22. Upstream merge state: ModGPU/main efabf6bc4, also 2026-10-22.)
 
 If a merge goes wrong and you need to identify which GPU patch
 touched a specific line: `git log --oneline 4908338f~1..HEAD -- <file>`.
