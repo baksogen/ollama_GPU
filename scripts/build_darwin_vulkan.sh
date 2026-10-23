@@ -18,7 +18,10 @@
 #    VOL_NAME="$(date)" ./scripts/build_darwin_vulkan.sh
 #
 VOL_NAME=${VOL_NAME:-"Ollama"}
-export VERSION=${VERSION:-$(git describe --tags --first-parent --abbrev=7 --long --dirty --always | sed -e "s/^v//g")}
+# No --first-parent: upstream release tags sit on commits that enter this
+# branch as second parents of merge commits, so --first-parent would pin the
+# version to the stale fork-point tag (v0.32.0) instead of the latest release.
+export VERSION=${VERSION:-$(git describe --tags --abbrev=7 --long --dirty --always | sed -e "s/^v//g")}
 export CGO_CFLAGS="-O3 -mmacosx-version-min=14.0"
 export CGO_CXXFLAGS="-O3 -mmacosx-version-min=14.0"
 export CGO_LDFLAGS="-mmacosx-version-min=14.0"
