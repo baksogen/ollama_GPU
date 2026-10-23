@@ -1,42 +1,73 @@
 <p align="center">
-  <a href="https://ollama.com">
-    <img src="https://github.com/ollama/ollama/assets/3325447/0d0b44e2-8f4a-4e99-9b52-a5c1c741c8f7" alt="ollama" width="200"/>
-  </a>
+  <img src="docs/images/ollamagpu-icon.png" alt="OllamaGPU" width="200"/>
 </p>
 
-# Ollama
+# OllamaGPU
 
-Start building with open models. Access the latest releases locally or in the cloud with complete privacy.
+Ollama with **AMD Radeon GPU acceleration on Intel Macs** — a fork of
+[ollama/ollama](https://github.com/ollama/ollama) that adds a Vulkan backend via
+**MoltenVK**. The official Ollama build accelerates only Apple Silicon (Metal);
+on Intel Macs it leaves the GPU unused — this fork puts an AMD Radeon to work.
+
+> [!WARNING]
+> Experimental — provided as-is, no official support. Verified on a
+> Radeon RX 6900 XT, Intel Mac, macOS 14+.
+
+- **Vulkan backend via MoltenVK 1.4.2** (pinned — 1.4.1 misreports AMD
+  `maxSubgroupSize` and produces garbage output; see
+  [KhronosGroup/MoltenVK#2755](https://github.com/KhronosGroup/MoltenVK/pull/2755))
+- Ships as **`OllamaGPU.app`** — installs side by side with the official `Ollama.app`
+  (don't run both at once: they share the default port 11434)
+- **Stable GPU discovery** — per-library device indexing keeps the Vulkan device
+  attached instead of silently falling back to CPU
+- **MLX disabled** — it requires Apple Silicon and is unavailable on Intel Macs
+- On Apple Silicon? Use the official [Ollama](https://ollama.com) build — Metal
+  is faster there.
 
 ## Download
 
-### macOS
+Grab `OllamaGPU.dmg` (or `OllamaGPU-darwin.zip`) from the
+[Releases](https://github.com/baksogen/ollama_GPU/releases) page and drag
+**OllamaGPU** into Applications.
+
+Requirements: Intel Mac, macOS 14.0 or newer, AMD Radeon GPU
+(MoltenVK translates Vulkan to Metal on the fly).
+
+## Build from source
+
+1. Install dependencies (once per machine):
+   ```bash
+   brew install cmake shaderc glslang libomp typescript
+   ```
+   > Make sure the standard development prerequisites (Go toolchain,
+   > Node.js/npm, etc.) are already installed.
+
+2. Create the universal binaries and the app bundle (lands in `dist/`):
+   ```bash
+   ./scripts/build_darwin_vulkan.sh
+   ```
+
+The resulting `dist/` folder contains `OllamaGPU.app` with the MoltenVK
+(Vulkan) backend enabled. It technically works on both Apple Silicon & Intel
+Macs, but is optimised for Intel Macs with AMD GPUs and will *probably* have
+worse performance on Apple Silicon.
+
+---
+
+Below is the upstream Ollama documentation — the CLI, REST API and integrations
+work in this fork unchanged.
+
+## About Ollama
+
+Start building with open models. Access the latest releases locally or in the cloud with complete privacy.
+
+### Official builds (Apple Silicon / Windows / Linux)
 
 ```shell
 curl -fsSL https://ollama.com/install.sh | sh
 ```
 
 or [download manually](https://ollama.com/download/Ollama.dmg)
-
-#### Experimental Intel Mac AMDGPU support via MoltenVK
-> [!WARNING]
-> This configuration is experimental - no support is provided, but feel free to explore it.
-
-To build app bundles with this backend:
-
-1. Install dependencies (once per machine):
-   ```bash
-   brew install cmake shaderc glslang libomp typescript
-   ```
-   > Make sure the standard development prerequisites (Go toolchain, Node.js/npm, etc.) from the earlier sections are already installed.
-
-2. Create the universal binaries and app bundles (they land in `dist/`):
-   ```bash
-   ./scripts/build_darwin_vulkan.sh
-   ```
-The resulting `dist/` folder contains `OllamaGPU.app`, but with the MoltenVK backend enabled.
-It should technically work on both Apple Silicon & Intel Macs, but is optimised for Intel Macs with AMD GPUs and will *probably* have worse performance in most use-cases on Apple Silicon.
-> The build pins MoltenVK 1.4.2 — 1.4.1 misreports AMD `maxSubgroupSize` (64 instead of 32), which corrupts generation output (garbage text) on models using gated delta net (Qwen3.x hybrid) and flash attention. See [KhronosGroup/MoltenVK#2755](https://github.com/KhronosGroup/MoltenVK/pull/2755).
 
 ### Windows
 
